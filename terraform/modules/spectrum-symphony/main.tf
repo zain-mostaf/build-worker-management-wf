@@ -19,6 +19,7 @@ locals {
 
     grid_manager_quantity = local.grid_manager_definition.quantity
     first_cidr = try(local.grid_manager_definition.subnets[0].subnet_section_cidrs)
+    primary_ip_offset = local.grid_manager_definition.primary_ip_offset
 
     cluster_prefix = var.cluster_prefix
     manager_prefix = local.grid_manager_definition.prefix_name
@@ -26,7 +27,12 @@ locals {
     grid_manager_names = [for i in range(local.grid_manager_quantity) : "${local.cluster_prefix}-${local.manager_prefix}-${format("%02d", i + 1)}" ]
     available_primary_ips = flatten([ for ip_range in local.first_cidr : [for index in range(pow(2, 32 - split("/", ip_range)[1])) : cidrhost(ip_range, index)]])
     
-    ip_machine_mapping = { for idx in range(local.grid_manager_quantity) : local.available_primary_ips[idx] => local.grid_manager_names[idx]}
+    selected_primary_ips = slice(
+        local.available_primary_ips,
+        local.primary_ip_offset,
+        local.primary_ip_offset + local.grid_manager_quantity
+    )
+    ip_machine_mapping = { for idx in range(local.grid_manager_quantity) : local.selected_primary_ips[idx] => local.grid_manager_names[idx]}
 
     private_dns_zone_id = var.private_dns_zone_id
     private_dns_instance_id = var.private_dns_instance_id

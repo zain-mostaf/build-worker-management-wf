@@ -32,6 +32,7 @@ variable grid_manager_definition {
         prefix_name         = optional(string, "grid-man"),
         server_type         = optional(string, "shared"),
         quantity            = number,
+        primary_ip_offset   = optional(number, 0),
         instance_profile    = string,
         image_name          = string,
         subnets             = list(object({
