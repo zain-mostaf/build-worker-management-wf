@@ -1,4 +1,3 @@
-```hcl
 ##
 # Copyright (C) IBM Inc. - All Rights Reserved
 #
@@ -243,11 +242,7 @@ resource "ibm_is_instance" "vsi" {
     for_each = {
       for key, vni in ibm_is_virtual_network_interface.secondary :
       key => vni
-      if vni.name != null &&
-         startswith(
-           vni.name,
-           "${each.value}-eth"
-         )
+      if local.secondary_vni_configuration[key].machine_name == each.value
     }
 
     content {
@@ -324,43 +319,3 @@ dynamic "network_attachments" {
     }
   }
 }
-```
-
-to:
-
-```hcl
-dynamic "network_attachments" {
-
-  for_each = {
-    for key, vni in ibm_is_virtual_network_interface.secondary :
-    key => vni
-    if local.secondary_vni_configuration[key].machine_name == each.value
-  }
-
-  content {
-
-    name = "${network_attachments.value.name}-attachment"
-
-    virtual_network_interface {
-      id = network_attachments.value.id
-    }
-  }
-}
-
-```
-
-I recommend the **second version** because it uses your existing configuration data rather than depending on the VNI naming convention.
-
-### One more important point
-
-Your existing configuration has:
-
-```hcl
-auto_delete = true
-```
-
-for the primary IP. With the standalone VNI resource, the **VNI itself is now managed independently from the VSI**. This is useful if you want to preserve/reuse the network interface independently.
-
-IBM's current example confirms this architecture: create `ibm_is_virtual_network_interface`, then reference its ID from `primary_network_attachment`; additional interfaces can be provided through `network_attachments`.
-
-**I would use the second `network_attachments` implementation above in your production module.**
