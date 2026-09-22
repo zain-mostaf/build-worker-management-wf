@@ -1,0 +1,45 @@
+#cloud-config
+users:
+ - name: egoadmin
+ - name: ibm_monitoring
+packages:
+ - ansible
+write_files:
+ - path: /opt/symphony-deployment-scripts/linux-master-deployment.yaml.gz
+   encoding: b64
+   content: "{{linux_master_deployment_content}}"
+ - path: /opt/symphony-deployment-scripts/linux-master-deployment-env.json.gz
+   encoding: b64
+   content: "{{linux_master_deployment_env_content}}"
+ - path: /opt/symphony-deployment-scripts/linux-master-postdeployment.yaml.gz
+   encoding: b64
+   content: "{{linux_master_postdeployment_content}}" 
+ - path: /opt/symphony-deployment-scripts/id_rsa.gz
+   encoding: b64
+   content: "{{id_rsa_content}}"
+ - path: /opt/symphony-deployment-scripts/inventory.txt.gz
+   encoding: b64
+   content: "{{inventory_content}}"
+{%if ego_role == "primary" %} - path: /opt/symphony-deployment-scripts/ego.conf.gz
+   encoding: b64
+   content: "{{ego_conf_content}}"
+ - path: /opt/symphony-deployment-scripts/root.pem.gz
+   encoding: b64
+   content: "{{cacert_pem_content}}"
+ - path: /opt/symphony-deployment-scripts/intermediate.pem.gz
+   encoding: b64
+   content: "{{cacert_intermediate_pem_content}}"
+ - path: /opt/symphony-deployment-scripts/user.pem.gz
+   encoding: b64
+   content: "{{user_pem_content}}"
+ - path: /opt/symphony-deployment-scripts/user.key.gz
+   encoding: b64
+   content: "{{user_key_content}}"
+ - path: /opt/symphony-deployment-scripts/servercertcasigned.pem.gz
+   encoding: b64
+   content: "{{server_pem_content}}"{% endif %}
+bootcmd:
+ - systemctl restart NetworkManager
+runcmd:
+ - for zipped_file in /opt/symphony-deployment-scripts/*.gz; do gunzip $zipped_file; done
+ - export ANSIBLE_HOST_KEY_CHECKING=False && cd /opt/symphony-deployment-scripts && ansible-playbook -vvv -i inventory.txt -e @linux-master-deployment-env.json  linux-master-deployment.yaml linux-master-postdeployment.yaml

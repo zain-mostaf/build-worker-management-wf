@@ -1,0 +1,174 @@
+---
+- name: Symphony Master deployment Ansible playbook
+  vars: 
+     dns_servers: "{{ dns_server_ips | default('127.0.0.1') }}" ## AD Server IPs can be configured or dnsmasq local IP will be used
+     EGO_TOP: /opt/ibm/spectrumcomputing
+     CLUSTER_ADMIN: egoadmin
+     SHARED_EGO_TOP: /data/{{ cluster_id }}/sym732
+     SYMPHONY_VERSION: "7.3.2"
+     additional_interface_routing_config: "{{ additional_routes | default([]) }}"
+  hosts: localhost
+  tasks:
+  - name: Network Setup (using NetworkManager)
+    block: 
+    - name: Setup first interface
+      nmcli:
+        conn_name: "System eth0"
+        dns4: "{{ dns_servers }}"
+        dns4_search: "{{ cluster_domain }}"
+        ifname: eth0
+        mtu: 9000
+        state: present
+        type: ethernet
+    - name: Add DNS options
+      shell: nmcli connection modify 'System eth0' ipv4.dns-options 'single-request-reopen'
+    - name: Setup routes
+      block:
+      ## nmcli conn modify 'Wired connection 1' +ipv4.routes "0.0.0.0/0 10.254.3.49 table=5000"
+      - name: Add new interfaces to separated routing tables
+        shell: nmcli connection modify '{{ item.conn_name }}' +ipv4.routes "0.0.0.0/0 {{ item.gateway }} table={{ item.table }}"
+        with_items: "{{ additional_interface_routing_config }}"
+      ## nmcli conn modify 'Wired connection 1' +ipv4.routing-rules "priority 100 from 10.254.3.48/28 table 5000"
+      - name: Add new IP Rules to the new created routing tables
+        shell: nmcli connection modify '{{ item.conn_name }}' +ipv4.routing-rules "priority {{ item.priority }} from {{ item.cidr }} table {{item.table}}, priority {{ item.priority }} to {{ item.cidr }} table {{item.table}}"
+        with_items: "{{ additional_interface_routing_config }}"
+    - name: Restart NetworkManager service
+      systemd:
+        name: NetworkManager
+        state: restarted
+    - name: Set PEERDNS=no (prevents dhclient-script to upgrade /etc/resolv.conf)
+      lineinfile:
+         path: /etc/sysconfig/network-scripts/ifcfg-eth0
+         line: PEERDNS=no
+         state: present
+    when: network_setup == "NetworkManager"
+    
+  - name: Ensure NFS storage is mounted and included at /etc/fstab
+    mount:
+      path: /data
+      src: "{{ nfs_storage_path }}"
+      fstype: nfs4
+      opts: "sec=sys,nfsvers=4.1"
+      state: mounted
+  - name: Move SSH private key to /root/.ssh 
+    shell: "mv /opt/symphony-deployment-scripts/id_rsa /root/.ssh && chmod 0600 /root/.ssh/id_rsa"
+
+  - name: Wait for cluster flag Configuration
+    wait_for: 
+      path: "{{ SHARED_EGO_TOP }}/cluster_configured"
+      state: present
+      timeout: 3600
+      delay: 15
+      sleep: 10
+  - name: Setup Symphony Certificates
+    block:
+    - name: Create CA folders under local folder
+      file: 
+          path: "{{item}}"
+          owner: "{{ CLUSTER_ADMIN }}"
+          state: directory
+      with_items:
+        - "{{EGO_TOP}}/wlp/usr/shared/resources/security/ca"
+
+    - name: Copy WebGUI certificates to local folder
+      copy: 
+        src: "{{ SHARED_EGO_TOP }}/security/{{item}}"
+        dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security"
+        remote_src: True
+        owner: "{{ CLUSTER_ADMIN }}"
+      with_items: 
+      - servercertcasigned.pem
+      - cacert.pem
+    - name: Copy SOAM CA Certificates to local folder
+      copy: 
+          src: "{{ SHARED_EGO_TOP }}/security/ca/{{item}}"
+          dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security/ca"
+          remote_src: True    
+      with_items: 
+      - root.pem
+      - intermediate.pem
+      when: symphony_soam_certificate is defined and symphony_soam_certificate == "true"
+    - name: Copy SOAM API Certificates to local folder
+      copy: 
+          src: "{{ SHARED_EGO_TOP }}/security/{{item}}"
+          dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security"
+          remote_src: True    
+      with_items: 
+      - user.pem
+      - user.key
+    - name: Import CA certificates to Trust Store
+      shell: |
+         TOPDIR={{ EGO_TOP }}/jre
+         KEYTOOL=/opt/ibm/spectrumcomputing/jre/8.0.8.5/linux-x86_64/bin/keytool
+         
+         cd {{EGO_TOP}}/wlp/usr/shared/resources/security
+         echo Import SOAM Root CA Cert
+         ${KEYTOOL} -import -noprompt -alias soamrootcaalias -trustcacerts -file ca/root.pem -keystore serverTrustStore.jks -storepass Liberty
+         echo Import SOAM Intermediate CA Cert
+         ${KEYTOOL} -import -noprompt -alias soamintermediatecaalias -file ca/intermediate.pem -storepass Liberty -keystore serverTrustStore.jks
+      when: symphony_soam_certificate is defined and symphony_soam_certificate == "true"
+    - name: Invoke Java Keytool to import certificates
+      shell: |
+       TOPDIR={{ EGO_TOP }}/jre
+       KEYTOOL=/opt/ibm/spectrumcomputing/jre/8.0.8.5/linux-x86_64/bin/keytool
+       dnsname=$HOSTNAME
+       domain={{ cluster_domain }}
+       
+       cd {{EGO_TOP}}/wlp/usr/shared/resources/security
+       echo Import SOAM CA Cert to Key Store
+       ${KEYTOOL} -importcert -noprompt -alias caalias -file cacert.pem -keystore serverKeyStore.jks -storepass Liberty
+       echo Import WEBGUI CA Cert to Key Store
+       ${KEYTOOL} -import -noprompt -alias srvalias -file servercertcasigned.pem -storepass Liberty -keystore serverKeyStore.jks
+       echo Import SOAM CA Cert to Trust Store
+       ${KEYTOOL} -importcert -noprompt -alias srvalias -file cacert.pem -keystore serverTrustStore.jks -storepass Liberty
+       echo Import ROOT CA certificate
+       
+       echo Import SOAM Certificate to Trust Store
+       ${KEYTOOL} -importcert -noprompt -alias soamalias -file user.pem -keystore serverTrustStore.jks -storepass Liberty
+
+  - name: Add property net.ipv4.tcp_max_syn_backlog in /etc/sysctl.conf
+    lineinfile:
+      path:  /etc/sysctl.conf
+      line: net.ipv4.tcp_max_syn_backlog=65536
+      state: present
+
+  - name: Symphony Non-Primary Configuration
+    block: 
+    - name: Add this host as management host
+      shell: |
+        source {{EGO_TOP}}/profile.platform
+        egosetsudoers.sh
+        egosetrc.sh
+        su {{CLUSTER_ADMIN}} -c 'egoconfig join {{ ego_primary_host }} -f'
+        su {{CLUSTER_ADMIN}} -c 'egoconfig mghost {{ SHARED_EGO_TOP }} -f'
+
+  - name: Start ego service
+    systemd:
+       name: ego
+       state: started
+       enabled: True
+  - name: Wait for file lock
+    wait_for: 
+       path: "{{ SHARED_EGO_TOP }}/restart.lock"       
+       delay: 30
+       sleep: 10
+       state: absent
+  - name: Request ego restart on primary
+    delegate_to: "{{ ego_primary_host }}"
+    block: 
+    - name: Create restart lock file
+      file: 
+         path: "{{ SHARED_EGO_TOP }}/restart.lock"  
+         state: touch
+         mode: '0666'
+    - name: Restart ego in primary
+      systemd:
+        name: ego
+        state: restarted
+    - name: Remove lock file
+      file: 
+         path: "{{ SHARED_EGO_TOP }}/restart.lock"  
+         state: absent
+
+  
+  

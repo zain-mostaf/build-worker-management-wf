@@ -1,0 +1,400 @@
+---
+- name: Symphony Master deployment Ansible playbook
+  vars: 
+     dns_servers: "{{ dns_server_ips | default('127.0.0.1') }}" ## AD Server IPs can be configured or dnsmasq local IP will be used
+     EGO_TOP: /opt/ibm/spectrumcomputing
+     CLUSTER_ADMIN: egoadmin
+     SHARED_EGO_TOP: /data/{{ cluster_id }}/sym732
+     SYMPHONY_VERSION: "7.3.2"
+     additional_interface_routing_config: "{{ additional_routes | default([]) }}"
+  hosts: localhost
+  tasks:
+  - name: Remove old deployment scripts if it exists
+    file: 
+       path: /opt/symphony-scripts
+       state: absent
+
+  - name: Network Setup (using NetworkManager)
+    block: 
+    - name: Setup first interface
+      nmcli:
+        conn_name: "System eth0"
+        dns4: "{{ dns_servers }}"
+        dns4_search: "{{ cluster_domain }}"
+        ifname: eth0
+        mtu: 9000
+        state: present
+        type: ethernet
+    - name: Add DNS options
+      shell: nmcli connection modify 'System eth0' ipv4.dns-options 'single-request-reopen'
+    - name: Setup routes
+      block:
+      ## nmcli conn modify 'Wired connection 1' +ipv4.routes "0.0.0.0/0 10.254.3.49 table=5000"
+      - name: Add new interfaces to separated routing tables
+        shell: nmcli connection modify '{{ item.conn_name }}' +ipv4.routes "0.0.0.0/0 {{ item.gateway }} table={{ item.table }}"
+        with_items: "{{ additional_interface_routing_config }}"
+      ## nmcli conn modify 'Wired connection 1' +ipv4.routing-rules "priority 100 from 10.254.3.48/28 table 5000"
+      - name: Add new IP Rules to the new created routing tables
+        shell: nmcli connection modify '{{ item.conn_name }}' +ipv4.routing-rules "priority {{ item.priority }} from {{ item.cidr }} table {{item.table}}, priority {{ item.priority }} to {{ item.cidr }} table {{item.table}}"
+        with_items: "{{ additional_interface_routing_config }}"
+    - name: Restart NetworkManager service
+      systemd:
+        name: NetworkManager
+        state: restarted
+    - name: Set PEERDNS=no (prevents dhclient-script to upgrade /etc/resolv.conf)
+      lineinfile:
+         path: /etc/sysconfig/network-scripts/ifcfg-eth0
+         line: PEERDNS=no
+         state: present
+    when: network_setup == "NetworkManager"
+    
+  - name: Ensure NFS storage is mounted and included at /etc/fstab
+    mount:
+      path: /data
+      src: "{{ nfs_storage_path }}"
+      fstype: nfs4
+      opts: "sec=sys,nfsvers=4.1"
+      state: mounted
+  - name: Setup NFS Storage data
+    block: 
+    - name: Check if config file exists in the Storage
+      stat: 
+        path: "{{ SHARED_EGO_TOP }}/cluster_configured"
+      register: cluster_configured
+    - name: Clear Symphony metadata storage if not empty
+      file: 
+        path: "{{ SHARED_EGO_TOP }}"
+        state: absent
+      when: cluster_configured.stat.exists != True
+    - name: Create Symphony metadata storage if not created
+      file: 
+         path: "{{ SHARED_EGO_TOP }}"
+         state: directory
+         owner: "{{ CLUSTER_ADMIN }}"
+         mode: '0755'
+      when: cluster_configured.stat.exists != True
+
+  - name: Update Symphony Cluster ID
+    block: 
+    - name: Update Symphony Cluster ID - rename file
+      shell: mv {{ EGO_TOP }}/kernel/conf/ego.cluster.IBMCloudSym73?Cluster {{ EGO_TOP }}/kernel/conf/ego.cluster.{{ cluster_id }}
+      ignore_errors: True
+    - name: Update Symphony Cluster ID - change file content
+      replace:
+        path: "{{ EGO_TOP }}/kernel/conf/ego.shared"
+        regexp: "IBMCloudSym73.*"
+        replace: "{{ cluster_id }}"
+    when: cluster_configured.stat.exists != True
+  - name: Include additional attributes in ego.shared
+    lineinfile:
+      path: "{{ EGO_TOP }}/kernel/conf/ego.shared"
+      insertbefore: "End Resource"
+      line: "{{ item }}"
+    loop: "{{ ego_new_attributes }}"
+  - name: Move SSH private key to /root/.ssh 
+    shell: mv /opt/symphony-deployment-scripts/id_rsa /root/.ssh
+    ignore_errors: True
+
+  - name: Check if ssl_cert_configured file exists in local disk
+    stat: 
+      path: "{{ EGO_TOP }}/ssl_cert_configured"
+    register: ssl_cert_configured
+  - name: Create WebGUI TLS Certificate
+    block: 
+    - name: Create security folder under NFS Storage
+      file:
+         path: "{{ SHARED_EGO_TOP }}/security"
+         state: directory
+         owner: "{{CLUSTER_ADMIN}}"
+         mode: '0755'
+    - name: Generate self-signed certificate for WebGUI (if not informed)
+      shell: |
+         TOPDIR={{ EGO_TOP }}/jre
+         KEYTOOL=/opt/ibm/spectrumcomputing/jre/8.0.8.5/linux-x86_64/bin/keytool
+         dnsname=$HOSTNAME
+         domain=*{{ cluster_domain }}
+
+         cd {{EGO_TOP}}/wlp/usr/shared/resources/security
+         echo WEBGUI certificate generation
+         $KEYTOOL -genkeypair -noprompt -alias srvalias -dname "CN=$domain,O=Platform,C=CA" -keystore serverKeyStore.jks -storepass Liberty -keypass Liberty -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:$dnsname"
+         $KEYTOOL -certreq -alias srvalias -file srvcertreq.csr -storepass Liberty -keystore serverKeyStore.jks -ext "san=dns:$dnsname"
+         $KEYTOOL -gencert -infile srvcertreq.csr -outfile servercertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:$dnsname"
+    
+      when: symphony_webgui_certificate is not defined or symphony_webgui_certificate == "false"
+    - name: Copy WebGUI certificates to local folder
+      copy: 
+        src: /opt/symphony-deployment-scripts/{{item}}
+        dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security"
+        remote_src: True
+        owner: "{{ CLUSTER_ADMIN }}"
+      with_items: 
+      - servercertcasigned.pem
+      - cacert.pem
+      when: symphony_webgui_certificate is defined and symphony_webgui_certificate == "true"
+    - name: Copy WebGUI certificates to shared folders
+      copy: 
+        src: "{{EGO_TOP}}/wlp/usr/shared/resources/security/{{item}}"
+        dest: "{{ SHARED_EGO_TOP }}/security"
+        remote_src: True
+        owner: "{{ CLUSTER_ADMIN }}"
+      with_items: 
+      - servercertcasigned.pem
+      - cacert.pem
+    - name: Generate self-signed certificates for SOAM API Component
+      shell: |
+         TOPDIR={{ EGO_TOP }}/jre
+         KEYTOOL=/opt/ibm/spectrumcomputing/jre/8.0.8.5/linux-x86_64/bin/keytool
+         dnsname=$HOSTNAME
+         domain={{ cluster_domain }}
+
+         cd {{EGO_TOP}}/wlp/usr/shared/resources/security
+         echo SOAM API certificate generation
+         $KEYTOOL -genkeypair -noprompt -alias soamalias -dname "CN=soam.$domain,O=Platform,C=CA" -keystore serverKeyStore.jks -storepass Liberty -keypass Liberty -keyalg rsa -validity 1095 -keysize 2048 -sigalg SHA256withRSA -ext "san=dns:soam.$dnsname"
+         $KEYTOOL -certreq -alias soamalias -file soamcertreq.csr -storepass Liberty -keystore serverKeyStore.jks -ext "san=dns:soam.$dnsname"
+         $KEYTOOL -gencert -infile soamcertreq.csr -outfile soamcertcasigned.pem -alias caalias -keystore caKeyStore.jks -storepass Liberty -validity 1095 -ext "san=dns:soam.$dnsname"
+         echo Convert Java Key Store to p12 format
+         $KEYTOOL -importkeystore -srckeystore serverKeyStore.jks -destkeystore user.p12 -srcstoretype JKS -deststoretype PKCS12 -srcstorepass Liberty -deststorepass Liberty -srcalias srvalias -destalias srvalias -srckeypass Liberty -destkeypass Liberty -noprompt > /dev/null 2>&1
+         echo Extract private key from KeyStore
+         openssl pkcs12 -in user.p12 -nodes -nocerts -passin "pass:Liberty"|grep -A 50 "BEGIN PRIVATE KEY" > user.key
+         echo Extract user.pem certificate
+         openssl x509 -in soamcertcasigned.pem -inform DER -out user.pem -outform PEM
+      when: symphony_soam_certificate is not defined or symphony_soam_certificate == "false"
+    - name: SOAM Certificate Provided by user
+      block: 
+      - name: Create CA folders to assemble cacert.pem
+        file: 
+          path: "{{item}}"
+          owner: "{{ CLUSTER_ADMIN }}"
+          state: directory
+        with_items:
+        - "{{EGO_TOP}}/wlp/usr/shared/resources/security/ca"
+        - "{{ SHARED_EGO_TOP }}/security/ca"
+      - name: Copy SOAM CA Certificates to local folder
+        copy: 
+          src: /opt/symphony-deployment-scripts/{{item}}
+          dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security/ca"
+          remote_src: True    
+        with_items: 
+        - root.pem
+        - intermediate.pem
+      - name: Copy SOAM API Certificates to local folder
+        copy: 
+          src: /opt/symphony-deployment-scripts/{{item}}
+          dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security"
+          remote_src: True    
+        with_items: 
+        - user.pem
+        - user.key
+      - name: Generate full CA chain (cacert.pem)
+        assemble:
+          src: "{{EGO_TOP}}/wlp/usr/shared/resources/security/ca"
+          dest: "{{EGO_TOP}}/wlp/usr/shared/resources/security/cacert.pem"
+          remote_src: no
+          delimiter: '\n'
+      - name: Copy intermediate and root certificates to shared folder
+        shell: cp -r "{{EGO_TOP}}/wlp/usr/shared/resources/security/ca" "{{ SHARED_EGO_TOP }}/security"
+      - name: Import CA certificates to Trust Store
+        shell: |
+         TOPDIR={{ EGO_TOP }}/jre
+         KEYTOOL=/opt/ibm/spectrumcomputing/jre/8.0.8.5/linux-x86_64/bin/keytool
+         
+         cd {{EGO_TOP}}/wlp/usr/shared/resources/security
+         echo Import SOAM Root CA Cert
+         ${KEYTOOL} -import -noprompt -alias soamrootcaalias -trustcacerts -file ca/root.pem -keystore serverKeyStore.jks -storepass Liberty
+         echo Import SOAM Intermediate CA Cert
+         ${KEYTOOL} -import -noprompt -alias soamintermediatecaalias -file ca/intermediate.pem -storepass Liberty -keystore serverKeyStore.jks
+      when: symphony_soam_certificate is defined and symphony_soam_certificate == "true"
+    - name: Copy SOAM API certificates to shared folder
+      copy: 
+          src: "{{EGO_TOP}}/wlp/usr/shared/resources/security/{{ item }}"
+          dest: "{{ SHARED_EGO_TOP }}/security"
+          remote_src: True
+          owner: "{{ CLUSTER_ADMIN }}"
+      with_items: 
+      - user.pem
+      - cacert.pem
+      - user.key
+
+    - name: Invoke Java Keytool to import certificate
+      shell: |
+       TOPDIR={{ EGO_TOP }}/jre
+       KEYTOOL=/opt/ibm/spectrumcomputing/jre/8.0.8.5/linux-x86_64/bin/keytool
+       dnsname=$HOSTNAME
+       domain={{ cluster_domain }}
+       
+       cd {{EGO_TOP}}/wlp/usr/shared/resources/security
+       echo Import SOAM CA Cert to Key Store
+       ${KEYTOOL} -importcert -noprompt -alias caalias -file cacert.pem -keystore serverKeyStore.jks -storepass Liberty
+       echo Import WEBGUI CA Cert to Key Store
+       ${KEYTOOL} -import -noprompt -alias srvalias -file servercertcasigned.pem -storepass Liberty -keystore serverKeyStore.jks
+       echo Import SOAM CA Cert to Trust Store
+       ${KEYTOOL} -importcert -noprompt -alias srvalias -file cacert.pem -keystore serverTrustStore.jks -storepass Liberty
+       echo Import ROOT CA certificate
+       
+       echo Import SOAM Certificate to Trust Store
+       ${KEYTOOL} -importcert -noprompt -alias soamalias -file user.pem -keystore serverKeyStore.jks -storepass Liberty
+    - name: Create ssl_cert_configured file
+      file: 
+         path: "{{ EGO_TOP }}/ssl_cert_configured"
+         state: touch
+         owner: "{{ CLUSTER_ADMIN }}"
+         mode: '0755'
+    when: cluster_configured.stat.exists != True and ssl_cert_configured.stat.exists != True
+  - name: Disable perf service
+    block:
+    - name: Replace localhost by hostname in perf files
+      shell: sed -i -e "s|localhost|$HOSTNAME|g" {{ EGO_TOP }}/{{ item }}
+      with_items:
+      - perf/conf/datasource.xml
+      - eservice/esc/conf/services/derby_service.xml
+    - name: Set perf service to MANUAL in perf config files
+      shell: sed -i -e "s|AUTOMATIC|MANUAL|g" {{ EGO_TOP }}/eservice/esc/conf/services/{{ item }}
+      with_items: 
+      - derby_service.xml
+      - plc_service.xml
+      - purger_service.xml
+  - name: Add property net.ipv4.tcp_max_syn_backlog in /etc/sysctl.conf
+    lineinfile:
+      path:  /etc/sysctl.conf
+      line: net.ipv4.tcp_max_syn_backlog=65536
+      state: present
+
+  - name: Symphony Primary Configuration
+    block: 
+    - name: Change SSM range in sd.xml
+      replace:
+         path: "{{ EGO_TOP }}/soam/{{ SYMPHONY_VERSION }}/eservice/sd.xml"
+         regexp: '(<ego:EnvironmentVariable name="SD_SDK_PORT">.*<\/ego:EnvironmentVariable>)'
+         replace: '\1 \n <ego:EnvironmentVariable name="SSM_SDK_ADDR">{{ symphony_ssm_port_range }}</ego:EnvironmentVariable>'
+      when: cluster_configured.stat.exists != True
+
+    - name: Add SSL setup (if symphony_soam_certificate is true)
+      replace:
+         path: "{{ EGO_TOP }}/soam/{{ SYMPHONY_VERSION }}/eservice/sd.xml"
+         regexp: '(<ego:EnvironmentVariable name="SD_SDK_PORT">.*<\/ego:EnvironmentVariable>)'
+         replace: | 
+           \1
+           <ego:EnvironmentVariable name="SD_SOAP_TRANSPORT">TCPIPv4SSL</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SD_SOAP_TRANSPORT_ARG">$EGO_DEFAULT_TS_PARAMS</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SDSOAPCLIENT_ARG">$EGO_CLIENT_TS_PARAMS</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SSM_SDK_TRANSPORT">TCPIPv4SSL</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SSM_SDK_TRANSPORT_ARG">$EGO_DEFAULT_TS_PARAMS</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SDK_TRANSPORT">TCPIPv4SSL</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SDK_TRANSPORT_ARG">$EGO_CLIENT_TS_PARAMS</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SD_SDK_TRANSPORT">TCPIPv4SSL</ego:EnvironmentVariable>
+           <ego:EnvironmentVariable name="SD_SDK_TRANSPORT_ARG">$EGO_DEFAULT_TS_PARAMS</ego:EnvironmentVariable> 
+      when: symphony_soam_certificate == "true" and cluster_configured.stat.exists != True
+    - name: Generate ego.conf from template
+      copy: 
+         src: "/opt/symphony-deployment-scripts/ego.conf"
+         dest: "{{ EGO_TOP }}/kernel/conf/ego.conf"
+         owner: egoadmin
+         mode: '0644'
+      when: cluster_configured.stat.exists != True
+
+    - name: Add this host to Symphony cluster
+      shell: |
+       source {{ EGO_TOP }}/profile.platform
+       egosetsudoers.sh -f 
+       egosetrc.sh
+       su {{CLUSTER_ADMIN}} -c 'egoconfig join `hostname`.{{ cluster_domain }} -f'
+    - name: Set Admin password
+      shell: |
+       source {{ EGO_TOP }}/profile.platform
+       egosetsudoers.sh -f 
+       egosetrc.sh
+       su {{CLUSTER_ADMIN}} -c 'egoconfig setpassword -x `echo -n {{ symphony_password }}|base64 -d` -f'
+      when: cluster_configured.stat.exists != True
+
+    # Entitlement is already included in Symphony Master image
+    - name: Set entitlement in Symphony
+      shell: |
+        source {{ EGO_TOP }}/profile.platform
+        egosetsudoers.sh -f
+        egosetrc.sh
+        su {{CLUSTER_ADMIN}} -c 'egoconfig setentitlement {{ EGO_TOP }}/kernel/conf/sym_adv_entitlement.dat'
+      when: cluster_configured.stat.exists != True
+
+    - name: Add this host as management host
+      shell: |
+        source {{ EGO_TOP }}/profile.platform
+        egosetsudoers.sh -f 
+        egosetrc.sh
+        su {{CLUSTER_ADMIN}} -c 'egoconfig mghost {{ SHARED_EGO_TOP }} -f'
+    - name: Create expected folders for Symphony
+      file: 
+        path: "{{ item }}"
+        owner: "{{ CLUSTER_ADMIN }}"
+        mode: '0755'
+        state: directory
+        recurse: True
+      when: cluster_configured.stat.exists != True
+      with_items: 
+      - "{{ SHARED_EGO_TOP }}/kernel/audit"
+      - "{{ SHARED_EGO_TOP }}/kernel/work/data"
+      - "{{ SHARED_EGO_TOP }}/hostfactory"
+    - name: Set EGO base port
+      shell: |
+       source {{ EGO_TOP }}/profile.platform
+       egosetsudoers.sh -f 
+       egosetrc.sh
+       su {{CLUSTER_ADMIN}} -c 'egoconfig setbaseport {{ ego_base_port }}'
+      when: cluster_configured.stat.exists != True
+    - name: FIX Bug - include server_internal.xml to file share
+      copy: 
+         src: "{{ EGO_TOP }}/kernel/conf/webapp/server_internal.xml"
+         dest: "{{ SHARED_EGO_TOP }}/kernel/conf/webapp/server_internal.xml"
+         owner: egoadmin
+         mode: '0644'
+         remote_src: true
+         
+  - name: Include configured file
+    file: 
+       path: "{{ SHARED_EGO_TOP }}/cluster_configured"
+       state: touch
+       mode: '0644'
+       owner: "{{ CLUSTER_ADMIN }}"
+    when: not (worker_os is defined and worker_os == "windows")
+  - name: Start ego service
+    systemd:
+      name: ego
+      state: started
+      enabled: True
+  - name: Wait vemkd port available
+    wait_for: 
+      delay: 30
+      port: "{{ ego_base_port + 1}}"
+      timeout: 600
+      sleep: 5
+  - name: Mixed environment configuration environment (Windows workers only)
+    block: 
+    - name: Mixed environment configuration - Symphony login 
+      shell: |
+       source {{ EGO_TOP }}/profile.platform
+       egosh user logon -u Admin -x `echo -n {{ symphony_password }}|base64 -d`
+    - name: Mixed environment configuration - Registering cluster administrator password (egoadmin)
+      shell: |
+       source {{ EGO_TOP }}/profile.platform
+       egosh ego execpasswd -u {{CLUSTER_ADMIN}} -x Symphony@123 -noverify
+    - name: Mixed environment configuration - Changing egoadmin execution user in Consumer Trees file
+      replace:
+        regexp: '(<ExecutionUser>egoadmin<\/ExecutionUser>)'
+        path: "{{ SHARED_EGO_TOP }}/kernel/conf/ConsumerTrees.xml"
+        replace: '<ExecutionUser>.\egoadmin</ExecutionUser>'
+    - name: Mixed environment configuration - Redeploy symping application 
+      shell: |
+       source {{ EGO_TOP }}/profile.platform
+       soamview app symping{{SYMPHONY_VERSION}} -p >/tmp/sp.xml 
+       soamreg /tmp/sp.xml -f
+       
+    - name: Mixed environment configuration - Restart ego service
+      systemd:
+        name: ego
+        state: restarted
+    - name: Include configured file
+      file: 
+         path: "{{ SHARED_EGO_TOP }}/cluster_configured"
+         state: touch
+         mode: '0644'
+         owner: "{{ CLUSTER_ADMIN }}"
+    when: worker_os is defined and worker_os == "windows"

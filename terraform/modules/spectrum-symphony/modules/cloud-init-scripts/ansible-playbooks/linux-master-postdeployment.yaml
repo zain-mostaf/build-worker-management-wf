@@ -1,0 +1,10 @@
+---
+- name: Linux worker post deployment playbook
+  hosts: localhost
+  vars:
+     EGO_TOP: /opt/ibm/spectrumcomputing
+     CLUSTERADMIN: egoadmin
+  tasks:
+  - name: Echo start post deployment tasks
+    shell: echo Starting post deployment tasks...
+${post_deployment_tasks}
