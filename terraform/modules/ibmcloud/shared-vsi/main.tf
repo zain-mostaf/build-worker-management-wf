@@ -288,17 +288,7 @@ resource "ibm_is_instance" "vsi" {
   # Add data volumes here later if required.
   ###########################################################################
 }
-```
 
-### Important correction
-
-There is one thing I would change from my previous answer.
-
-The `network_attachments` filtering above relies on the VNI name. A **cleaner and safer implementation** is to filter using the VNI configuration key rather than the resource name.
-
-So I recommend changing this:
-
-```hcl
 dynamic "network_attachments" {
 
   for_each = {
