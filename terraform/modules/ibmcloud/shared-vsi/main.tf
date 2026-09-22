@@ -288,24 +288,3 @@ resource "ibm_is_instance" "vsi" {
   # Add data volumes here later if required.
   ###########################################################################
 }
-
-dynamic "network_attachments" {
-
-  for_each = {
-    for key, vni in ibm_is_virtual_network_interface.secondary :
-    key => vni
-    if vni.name != null &&
-       startswith(
-         vni.name,
-         "${each.value}-eth"
-       )
-  }
-
-  content {
-    name = "${network_attachments.value.name}-attachment"
-
-    virtual_network_interface {
-      id = network_attachments.value.id
-    }
-  }
-}
