@@ -85,14 +85,14 @@ variable grid_manager_definition {
             ego_config_override   = optional(string),
             post_deployment_tasks = optional(string),
 
-        })),
+        }),
         symphony_certificates=object({
             ca_certificate_pem     = optional(string),
             ca_intermediate_pem     = optional(string),
             soam_certificate_pem   = optional(string),
             soam_private_key_pem   = optional(string),
             webgui_certificate_pem = optional(string)
-        })),
+        }),
         placement_group = optional(object({
             key  = optional(string),
             name = optional(string),
