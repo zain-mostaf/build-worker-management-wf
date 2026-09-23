@@ -6,7 +6,11 @@ symphony_admin_password = "REPLACE_WITH_SYMPHONY_ADMIN_PASSWORD"
 cluster_prefix       = "REPLACE_WITH_CLUSTER_PREFIX"
 zone                 = "REPLACE_WITH_PRIMARY_ZONE"
 vpc_name             = "REPLACE_WITH_VPC_NAME"
+# The resource group and VPC must already exist in the IBM Cloud account.
 resource_group_name  = "REPLACE_WITH_RESOURCE_GROUP_NAME"
+existing_ssh_key_name = "REPLACE_WITH_EXISTING_SSH_KEY_NAME"
+# Sensitive value: provide the private key matching existing_ssh_key_name via Schematics.
+deployment_private_key = "REPLACE_WITH_EXISTING_SSH_PRIVATE_KEY"
 ssh_keys             = []
 
 # IBM Cloud DNS Services instance and private zone.
@@ -15,21 +19,21 @@ private_dns_instance_name = "REPLACE_WITH_DNS_INSTANCE_NAME"
 private_dns_zone_name     = "REPLACE_WITH_PRIVATE_DNS_ZONE_NAME"
 
 grid_manager_definition = {
-  prefix_name      = "gm"
+  prefix_name      = "grid-man"
   server_type      = "shared"
-  quantity         = 10
-  primary_ip_offset = 4
-  instance_profile = "bx2-4x16"
-  image_name       = "REPLACE_WITH_IMAGE_ID"
+  quantity         = 3
+  primary_ip_offset = 5
+  instance_profile = "mx2-32x256-cl"
+  image_name       = "r014-6fb53289-e071-49bb-af78-269762b46539"
 
   worker_os        = "windows"
 
   subnets = [
     {
       key                  = "internal-subnet"
-      name                 = "REPLACE_WITH_INTERNAL_SUBNET_NAME"
+      name                 = "REPLACE_WITH_SUBNET_NAME"
       exists               = true
-      subnet_section_cidrs = ["10.0.0.0/24"]
+      subnet_section_cidrs = ["10.136.64.0/22"]
     }
   ]
 
@@ -61,11 +65,11 @@ grid_manager_definition = {
 
   security_groups = [
     {
-      name   = "REPLACE_WITH_ALLOW_ALL_SECURITY_GROUP_NAME"
+      name   = "REPLACE_WITH_SYMPHONY_SECURITY_GROUP_NAME"
       exists = true
     },
     {
-      name   = "REPLACE_WITH_SYMPHONY_HOSTS_SECURITY_GROUP_NAME"
+      name   = "REPLACE_WITH_ALLOW_ALL_SECURITY_GROUP_NAME"
       exists = true
     }
   ]
@@ -84,7 +88,8 @@ nfs_storage_definition = {
       key                       = "data"
       name                      = "data"
       nfs_storage_ip            = "REPLACE_WITH_NFS_IP"
-      nfs_storage_subnet_name   = "REPLACE_WITH_NFS_SUBNET_NAME"
+      # This subnet must already exist; the NFS mount-point module looks it up.
+      nfs_storage_subnet_name   = "REPLACE_WITH_EXISTING_NFS_SUBNET_NAME"
       security_groups = [
         {
           name   = "REPLACE_WITH_NFS_SECURITY_GROUP_NAME"

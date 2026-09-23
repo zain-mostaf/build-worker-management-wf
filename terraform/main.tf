@@ -54,7 +54,11 @@ data ibm_dns_zones zones {
     instance_id = data.ibm_resource_instance.dns_instance[0].guid
 }
 
-// SSH Keys to be include in all managers created by this automation
+// Existing SSH key used by all managers created by this automation
+data ibm_is_ssh_key internal_ssh_key {
+    name = var.existing_ssh_key_name
+}
+
 data ibm_is_ssh_key ssh_key {
     for_each = toset(local.ssh_keys)
     name = each.key
@@ -63,14 +67,7 @@ data ibm_is_ssh_key ssh_key {
 locals {
     dns_instance_id = try(data.ibm_resource_instance.dns_instance[0].guid, "")
     dns_zone_id = try([for zone in data.ibm_dns_zones.zones[0].dns_zones : zone.zone_id if zone.name == local.dns_zone_name][0], "")
-    ssh_key_ids = concat([module.internal_ssh_key.ssh_key_id], [for key,obj in data.ibm_is_ssh_key.ssh_key : obj.id ])
-}
-
-// Common Internal Key used for this automation
-module internal_ssh_key {
-    source = "./modules/ibmcloud/ssh-key"
-    name = "${local.cluster_prefix}-internal-key"
-    exists = false
+    ssh_key_ids = concat([data.ibm_is_ssh_key.internal_ssh_key.id], [for key,obj in data.ibm_is_ssh_key.ssh_key : obj.id ])
 }
 
 // NFS Storage
@@ -103,5 +100,5 @@ module grid_managers {
     grid_manager_definition = local.grid_manager_definition
     symphony_admin_password = var.symphony_admin_password
     nfs_storage_path = module.nfs_storage.nfs_mount_paths[0]
-    deployment_private_key = module.internal_ssh_key.private_key["${local.cluster_prefix}-internal-key"]
+    deployment_private_key = var.deployment_private_key
 }

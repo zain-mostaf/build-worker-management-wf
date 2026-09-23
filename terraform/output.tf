@@ -44,22 +44,22 @@ output symphony_cluster_info {
 EOT
 }
 
-output ad_dns_ips {
-    value = try(local.grid_manager_definition.ad_configuration.ad_dns_server, "")
-}
+#output ad_dns_ips {
+#    value = try(local.grid_manager_definition.ad_configuration.ad_dns_server, "")
+#}
 
-output ad_domain {
-    value = try(local.grid_manager_definition.ad_configuration.ad_domain, "")    
-}
+#output ad_domain {
+#    value = try(local.grid_manager_definition.ad_configuration.ad_domain, "")
+#}
 
-output ad_user {
-    value = try(local.grid_manager_definition.ad_configuration.ad_join_user, "") 
-}
+#output ad_user {
+#    value = try(local.grid_manager_definition.ad_configuration.ad_join_user, "")
+#}
 
-output ad_password {
-    value = try(local.grid_manager_definition.ad_configuration.ad_join_password, "")
-    sensitive = true
-}
+#output ad_password {
+#    value = try(local.grid_manager_definition.ad_configuration.ad_join_password, "")
+#    sensitive = true
+#}
 
 output symphony_image_name {
     value = try(local.grid_manager_definition.image_name, "")

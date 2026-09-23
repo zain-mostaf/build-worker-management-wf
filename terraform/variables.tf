@@ -44,6 +44,17 @@ variable ssh_keys {
     default = []
 }
 
+variable existing_ssh_key_name {
+    type        = string
+    description = "Name of an existing IBM Cloud SSH key used to launch the VSIs."
+}
+
+variable deployment_private_key {
+    type        = string
+    sensitive   = true
+    description = "Private key matching existing_ssh_key_name, used by Symphony cloud-init."
+}
+
 variable private_dns_instance_name {
     type = string
     description = "Name of a Private DNS instance to create DNS records for the Virtual Machines."
