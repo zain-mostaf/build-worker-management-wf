@@ -1,0 +1,78 @@
+# Copy this file to terraform.tfvars and replace every REPLACE_* value.
+# Keep terraform.tfvars out of source control because it contains credentials.
+
+ibmcloud_api_key     = "REPLACE_WITH_IBM_CLOUD_API_KEY"
+cluster_prefix       = "tor3eqt"
+zone                 = "ca-tor-3"
+vpc_name             = "REPLACE_WITH_VPC_NAME"
+resource_group_name  = "REPLACE_WITH_RESOURCE_GROUP_NAME"
+ssh_keys             = []
+
+# IBM Cloud DNS Services instance and private zone.
+# These two values cause an A and PTR record to be created for every VSI.
+private_dns_instance_name = "REPLACE_WITH_DNS_INSTANCE_NAME"
+private_dns_zone_name     = "REPLACE_WITH_PRIVATE_DNS_ZONE_NAME"
+
+grid_manager_definition = {
+  prefix_name      = "gm"
+  server_type      = "shared"
+  quantity         = 3
+  instance_profile = "bx2-4x16"
+  image_name       = "REPLACE_WITH_IMAGE_ID"
+  dns_server       = "161.26.0.10"
+  worker_os        = "windows"
+
+  subnets = [
+    {
+      key                  = "internal-subnet"
+      name                 = "REPLACE_WITH_INTERNAL_SUBNET_NAME"
+      exists               = true
+      subnet_section_cidrs = ["172.200.250.12/30"]
+    },
+    {
+      key                  = "exposed-subnet"
+      name                 = "REPLACE_WITH_EXPOSED_SUBNET_NAME"
+      exists               = true
+      subnet_section_cidrs = ["10.200.15.10/30"]
+    }
+  ]
+
+  symphony_config_info = {
+    sym_cluster_id      = "citi-tor3eqt"
+    ego_base_port       = 9100
+    ego_ssl_setup       = true
+    ego_ssl_port        = 9114
+    ego_ssm_range       = "9120-9199"
+    post_deployment_tasks = ""
+  }
+
+  # Leave certificate values empty to use the module's certificate generation.
+  # Supply PEM values here only when using customer-managed certificates.
+  symphony_certificates = {
+    ca_intermediate_pem = ""
+    ca_certificate_pem  = ""
+    soam_certificate_pem = ""
+    soam_private_key_pem = ""
+    webgui_certificate_pem = ""
+  }
+
+  placement_group = {
+    key    = "placement-group"
+    exists = false
+    name   = "tor3eqt-symphony-master-nodes-pg"
+    type   = "host_spread"
+  }
+
+  security_groups = [
+    {
+      name   = "REPLACE_WITH_ALLOW_ALL_SECURITY_GROUP_NAME"
+      exists = true
+    },
+    {
+      name   = "REPLACE_WITH_SYMPHONY_HOSTS_SECURITY_GROUP_NAME"
+      exists = true
+    }
+  ]
+
+  data_volumes = []
+}

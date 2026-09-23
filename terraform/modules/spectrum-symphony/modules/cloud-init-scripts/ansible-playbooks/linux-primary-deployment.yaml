@@ -1,7 +1,7 @@
 ---
 - name: Symphony Master deployment Ansible playbook
   vars: 
-     dns_servers: "{{ dns_server_ips | default('127.0.0.1') }}" ## AD Server IPs can be configured or dnsmasq local IP will be used
+    dns_servers: "{{ dns_server_ips | default('161.26.0.10') }}" ## IBM Cloud VPC DNS resolver
      EGO_TOP: /opt/ibm/spectrumcomputing
      CLUSTER_ADMIN: egoadmin
      SHARED_EGO_TOP: /data/{{ cluster_id }}/sym732

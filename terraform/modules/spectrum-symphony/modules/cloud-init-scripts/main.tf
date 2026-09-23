@@ -73,7 +73,7 @@ locals {
       nfs_storage_path = var.nfs_storage_path
       symphony_ssm_port_range = local.symphony_ssm_port_range
       symphony_password = base64encode("Symphony@123") // FIXME
-      dns_server_ips = local.ad_dns_server
+    dns_server_ips = try(local.grid_manager_definition.dns_server, "161.26.0.10")
       additional_routes = try(local.additional_routes, [])
       symphony_web_certificate = local.symphony_webgui_certificate != "" ? "true" : "false"
       symphony_soam_certificate = local.symphony_soam_certificate != "" ? "true" : "false"
@@ -85,9 +85,7 @@ locals {
       worker_os = local.worker_os
    }
 
-   // Active Directory Information
-   ad_dns_server = try(local.grid_manager_definition.ad_configuration.ad_dns_server, null)
-   ad_domain = try(local.grid_manager_definition.ad_configuration.ad_domain, "")
+    // Legacy Active Directory fields remain optional for input compatibility.
    ad_join_user = try(local.grid_manager_definition.ad_configuration.ad_join_user, "")
    ad_join_password = try(local.grid_manager_definition.ad_configuration.ad_join_password, "")
 }

@@ -109,6 +109,7 @@ variable grid_manager_definition {
             acl_name             = optional(string, null),
             subnet_section_cidrs = list(string)
         }))
+        dns_server             = optional(string, "161.26.0.10")
         ad_configuration    = optional(object({
             ad_dns_server = optional(string),
             ad_domain = optional(string),

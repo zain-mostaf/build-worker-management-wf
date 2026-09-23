@@ -104,7 +104,7 @@ module cloud_init_scripts {
     ego_role = each.key
     ego_master_list = try(slice(local.grid_manager_names,0,2), [local.grid_manager_names[0]])
     nfs_storage_path = local.nfs_storage_path 
-    cluster_domain = try(module.dns_entries[local.private_dns_zone_id].domain_name , try(local.grid_manager_definition.ad_configuration.ad_domain, ""))
+    cluster_domain = try(module.dns_entries[local.private_dns_zone_id].domain_name, "")
     grid_manager_definition = local.grid_manager_definition
     subnet_cidrs = [ for index,obj in local.grid_manager_definition.subnets : module.subnets[obj.key].ipv4_cidr_block ]
     deployment_private_key = local.deployment_private_key
