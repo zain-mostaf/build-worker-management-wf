@@ -48,6 +48,6 @@ resource "ibm_dns_resource_record" "dns_PTR_records" {
     zone_id = local.private_dns_zone_id
     type = "PTR"
     name = each.key
-    rdata = "${each.value}.${local.zone_name}."
+    rdata = "${each.value}.${trimsuffix(local.zone_name, ".")}"
     ttl = local.private_dns_ttl
 }
