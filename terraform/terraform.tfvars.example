@@ -25,9 +25,6 @@ grid_manager_definition = {
   instance_profile = "bx2-4x16"
   image_name       = "REPLACE_WITH_IMAGE_ID"
 
-  # IBM VPC resolver used by the VSI operating system.
-  # This is separate from the IBM Cloud DNS Services instance and zone above.
-  dns_server       = "161.26.0.10"
   worker_os        = "windows"
 
   subnets = [
@@ -36,12 +33,6 @@ grid_manager_definition = {
       name                 = "REPLACE_WITH_INTERNAL_SUBNET_NAME"
       exists               = true
       subnet_section_cidrs = ["10.136.64.0/24"]
-    },
-    {
-      key                  = "exposed-subnet"
-      name                 = "REPLACE_WITH_EXPOSED_SUBNET_NAME"
-      exists               = false
-      subnet_section_cidrs = ["10.136.65.0/24"]
     }
   ]
 
