@@ -23,9 +23,7 @@ output symphony_subnet_ids {
 output dns_ptr_diagnostics {
     value = {
         for zone_id, dns_entry in module.dns_entries : zone_id => {
-            forward_zone    = dns_entry.domain_name
-            reverse_zone    = dns_entry.reverse_zone_name
-            reverse_zone_id = dns_entry.reverse_zone_id
+            forward_zone     = dns_entry.domain_name
             ptr_record_count = dns_entry.ptr_record_count
         }
     }
