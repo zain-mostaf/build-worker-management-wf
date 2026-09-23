@@ -13,6 +13,7 @@
 locals {
     private_dns_instance_id = var.private_dns_instance_id
     private_dns_zone_id = var.private_dns_zone_id
+    private_dns_reverse_zone_id = var.private_dns_reverse_zone_id
     private_dns_ttl = var.private_dns_ttl
     machine_ip_name_mapping = var.machine_ip_name_mapping
     private_dns_ptr_records = true
@@ -25,7 +26,7 @@ data "ibm_dns_zones" "zones" {
 
 locals {
     zone_name = try([for zone in data.ibm_dns_zones.zones.dns_zones : zone.name if zone.zone_id == local.private_dns_zone_id][0], "")
-    ptr_records_to_create = (local.zone_name != "" && local.private_dns_ptr_records == true) ? local.machine_ip_name_mapping : {}
+    ptr_records_to_create = (local.private_dns_reverse_zone_id != "" && local.private_dns_ptr_records == true) ? local.machine_ip_name_mapping : {}
 }
 
 // Create DNS A records from the received IP/name mapping received
@@ -39,15 +40,15 @@ resource "ibm_dns_resource_record" "dns_A_records" {
     ttl = local.private_dns_ttl
 }
 
-// Create DNS PTR records (if zone found and private_dns_ptr_records == true)
+// Create DNS PTR records only when a separate reverse zone is supplied.
 resource "ibm_dns_resource_record" "dns_PTR_records" {
     depends_on = [ibm_dns_resource_record.dns_A_records]
 
     for_each = local.ptr_records_to_create
     instance_id = local.private_dns_instance_id
-    zone_id = local.private_dns_zone_id
+    zone_id = local.private_dns_reverse_zone_id
     type = "PTR"
-    name = each.key
-    rdata = "${each.value}.${local.zone_name}"
+    name = "${join(".", reverse(split(".", each.key)))}.in-addr.arpa."
+    rdata = "${each.value}.${local.zone_name}."
     ttl = local.private_dns_ttl
 }

@@ -35,6 +35,7 @@ locals {
     ip_machine_mapping = { for idx in range(local.grid_manager_quantity) : local.selected_primary_ips[idx] => local.grid_manager_names[idx]}
 
     private_dns_zone_id = var.private_dns_zone_id
+    private_dns_reverse_zone_id = var.private_dns_reverse_zone_id
     private_dns_instance_id = var.private_dns_instance_id
     // future: multiple zone entries with adoption of multiple netowrks?
     dns_zone_entries = { for idx,obj in [local.private_dns_zone_id] : obj => {
@@ -73,6 +74,7 @@ module subnets {
     resource_group_id = local.resource_group_id
     zone = local.zone
     acl_name = each.value.acl_name
+    vpc_name = var.vpc_name
     ipv4_cidr_block = each.value.ipv4_cidr_block
 }
 
@@ -93,6 +95,7 @@ module dns_entries {
     for_each = local.dns_zone_entries
     source = "./../ibmcloud/dns-entry"
     private_dns_zone_id = each.key
+    private_dns_reverse_zone_id = local.private_dns_reverse_zone_id
     private_dns_instance_id = each.value.dns_instance_id
     machine_ip_name_mapping = each.value.dns_record_mapping
 }
@@ -106,6 +109,7 @@ module cloud_init_scripts {
     nfs_storage_path = local.nfs_storage_path 
     cluster_domain = try(module.dns_entries[local.private_dns_zone_id].domain_name, "")
     grid_manager_definition = local.grid_manager_definition
+    symphony_admin_password = var.symphony_admin_password
     subnet_cidrs = [ for index,obj in local.grid_manager_definition.subnets : module.subnets[obj.key].ipv4_cidr_block ]
     deployment_private_key = local.deployment_private_key
 }
@@ -115,7 +119,7 @@ module cloud_init_scripts {
 module primary_grid_manager {
     depends_on = [ module.dns_entries ]
     source = "./../ibmcloud/shared-vsi"
-    machine_ip_name_mapping = { "${local.available_primary_ips[0]}" = local.ip_machine_mapping[local.available_primary_ips[0]] }
+    machine_ip_name_mapping = { "${local.selected_primary_ips[0]}" = local.ip_machine_mapping[local.selected_primary_ips[0]] }
     symphony_profile = local.grid_manager_definition.instance_profile
     security_group_ids = [ for security_group in module.security_groups : security_group.security_group_id ]
     zone = local.zone
@@ -139,7 +143,7 @@ module primary_grid_manager {
 module other_managers {
     depends_on = [ module.dns_entries ]
     source = "./../ibmcloud/shared-vsi"
-    machine_ip_name_mapping = { for remaining_ip in slice(local.available_primary_ips, 1, local.grid_manager_definition.quantity) : remaining_ip => local.ip_machine_mapping[remaining_ip] }
+    machine_ip_name_mapping = { for remaining_ip in slice(local.selected_primary_ips, 1, local.grid_manager_definition.quantity) : remaining_ip => local.ip_machine_mapping[remaining_ip] }
     symphony_profile = local.grid_manager_definition.instance_profile
     security_group_ids = [ for security_group in module.security_groups : security_group.security_group_id ]
     zone = local.zone

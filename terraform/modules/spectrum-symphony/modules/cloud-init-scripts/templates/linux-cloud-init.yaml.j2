@@ -16,6 +16,7 @@ write_files:
    content: "{{linux_master_postdeployment_content}}" 
  - path: /opt/symphony-deployment-scripts/id_rsa.gz
    encoding: b64
+   permissions: '0600'
    content: "{{id_rsa_content}}"
  - path: /opt/symphony-deployment-scripts/inventory.txt.gz
    encoding: b64

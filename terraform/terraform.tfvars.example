@@ -2,6 +2,7 @@
 # Keep terraform.tfvars out of source control because it contains credentials.
 
 ibmcloud_api_key     = "REPLACE_WITH_IBM_CLOUD_API_KEY"
+symphony_admin_password = "REPLACE_WITH_SYMPHONY_ADMIN_PASSWORD"
 cluster_prefix       = "tor3eqt"
 zone                 = "ca-tor-3"
 vpc_name             = "REPLACE_WITH_VPC_NAME"
@@ -9,16 +10,23 @@ resource_group_name  = "REPLACE_WITH_RESOURCE_GROUP_NAME"
 ssh_keys             = []
 
 # IBM Cloud DNS Services instance and private zone.
-# These two values cause an A and PTR record to be created for every VSI.
+# These values select the IBM Cloud DNS instance and forward zone for A records.
+# Add a reverse zone name as well when PTR records are required.
 private_dns_instance_name = "REPLACE_WITH_DNS_INSTANCE_NAME"
 private_dns_zone_name     = "REPLACE_WITH_PRIVATE_DNS_ZONE_NAME"
+# Optional. Required only when PTR records are needed.
+private_dns_reverse_zone_name = ""
 
 grid_manager_definition = {
   prefix_name      = "gm"
   server_type      = "shared"
-  quantity         = 3
+  quantity         = 10
+  primary_ip_offset = 4
   instance_profile = "bx2-4x16"
   image_name       = "REPLACE_WITH_IMAGE_ID"
+
+  # IBM VPC resolver used by the VSI operating system.
+  # This is separate from the IBM Cloud DNS Services instance and zone above.
   dns_server       = "161.26.0.10"
   worker_os        = "windows"
 
@@ -27,13 +35,13 @@ grid_manager_definition = {
       key                  = "internal-subnet"
       name                 = "REPLACE_WITH_INTERNAL_SUBNET_NAME"
       exists               = true
-      subnet_section_cidrs = ["172.200.250.12/30"]
+      subnet_section_cidrs = ["10.136.64.0/24"]
     },
     {
       key                  = "exposed-subnet"
       name                 = "REPLACE_WITH_EXPOSED_SUBNET_NAME"
-      exists               = true
-      subnet_section_cidrs = ["10.200.15.10/30"]
+      exists               = false
+      subnet_section_cidrs = ["10.136.65.0/24"]
     }
   ]
 

@@ -11,7 +11,8 @@
 ##
 
 output private_key {
-   value = { for key in formatlist(var.name) : key => tls_private_key.ssh_private_key[key].private_key_openssh }
+   value = { for key in formatlist(var.name) : key => try(tls_private_key.ssh_private_key[key].private_key_openssh, "") }
+   sensitive = true
 }
 
 output ssh_key_id {

@@ -375,7 +375,7 @@
     - name: Mixed environment configuration - Registering cluster administrator password (egoadmin)
       shell: |
        source {{ EGO_TOP }}/profile.platform
-       egosh ego execpasswd -u {{CLUSTER_ADMIN}} -x Symphony@123 -noverify
+       egosh ego execpasswd -u {{CLUSTER_ADMIN}} -x `echo -n {{ symphony_password }}|base64 -d` -noverify
     - name: Mixed environment configuration - Changing egoadmin execution user in Consumer Trees file
       replace:
         regexp: '(<ExecutionUser>egoadmin<\/ExecutionUser>)'

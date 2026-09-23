@@ -50,17 +50,17 @@ variable grid_manager_definition {
             ad_join_user = optional(string),
             ad_join_password = optional(string)
         })),
-        symphony_config_info     = optional(object({
+        symphony_config_info     = object({
             sym_cluster_id  = string,
             ego_base_port   = optional(number, 7869),
-            ego_ssl_setup   = optional(string, "false"),
+            ego_ssl_setup   = optional(bool, false),
             ego_ssl_port    = optional(number),
             ego_ssm_range   = optional(string, "20000-20030"),
             ego_config_override   = optional(string),
             post_deployment_tasks = optional(string, ""),
 
         })),
-        symphony_certificates=optional(object({
+        symphony_certificates=object({
             ca_certificate_pem     = optional(string, ""),
             ca_intermediate_pem     = optional(string, ""),
             soam_certificate_pem   = optional(string, ""),
@@ -99,4 +99,10 @@ variable deployment_private_key {
     type = string
     sensitive = true
     description = "Deployment Key to be used to setup Symphony SSH password-less access."
+}
+
+variable symphony_admin_password {
+    type = string
+    sensitive = true
+    description = "Password used by Symphony post-deployment administration tasks."
 }

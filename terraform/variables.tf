@@ -12,6 +12,14 @@
 
 variable ibmcloud_api_key {
     description = "IBM Cloud API Key to be used by "
+    type = string
+    sensitive = true
+}
+
+variable symphony_admin_password {
+    description = "Password used by Symphony post-deployment administration tasks."
+    type = string
+    sensitive = true
 }
 
 variable cluster_prefix {
@@ -44,6 +52,11 @@ variable private_dns_instance_name {
 variable private_dns_zone_name {
     default = ""
     description = "Name of a zone under Private DNS instance where DNS records will be created."   
+}
+
+variable private_dns_reverse_zone_name {
+    default = ""
+    description = "Optional reverse DNS zone name for PTR records."
 }
 
 variable nfs_storage_definition {
@@ -89,6 +102,11 @@ variable nfs_storage_definition {
             }
         ]
     }
+
+    validation {
+        condition     = length(var.nfs_storage_definition.mount_points) > 0
+        error_message = "nfs_storage_definition.mount_points must contain at least one mount point."
+    }
 }
 
 
@@ -116,7 +134,7 @@ variable grid_manager_definition {
             ad_join_user = optional(string),
             ad_join_password = optional(string)
         })),
-        symphony_config_info     = optional(object({
+        symphony_config_info     = object({
             sym_cluster_id  = string,
             ego_base_port   = optional(number, 7869),
             ego_ssl_setup   = optional(bool, false),
@@ -126,7 +144,7 @@ variable grid_manager_definition {
             post_deployment_tasks = optional(string),
 
         })),
-        symphony_certificates=optional(object({
+        symphony_certificates=object({
             ca_certificate_pem     = optional(string),
             ca_intermediate_pem    = optional(string),
             soam_certificate_pem   = optional(string),
@@ -153,5 +171,16 @@ variable grid_manager_definition {
         tags = optional(list(string), []),
         worker_os = optional(string, "linux")
     })
+
+        validation {
+            condition = length(var.grid_manager_definition.subnets) > 0 ? (
+                var.grid_manager_definition.quantity > 0 &&
+                var.grid_manager_definition.primary_ip_offset >= 0 &&
+                var.grid_manager_definition.quantity + var.grid_manager_definition.primary_ip_offset <= sum([
+                    for cidr in var.grid_manager_definition.subnets[0].subnet_section_cidrs : pow(2, 32 - tonumber(split("/", cidr)[1]))
+                ])
+            ) : false
+            error_message = "grid_manager_definition must contain at least one VSI and enough addresses for quantity plus primary_ip_offset."
+        }
 
 }

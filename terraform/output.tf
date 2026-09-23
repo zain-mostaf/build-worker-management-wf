@@ -58,6 +58,7 @@ output ad_user {
 
 output ad_password {
     value = try(local.grid_manager_definition.ad_configuration.ad_join_password, "")
+    sensitive = true
 }
 
 output symphony_image_name {

@@ -22,6 +22,10 @@ variable vpc_id {
     description = "An existent VPC created by the HPC Foundation offering."
 }
 
+variable vpc_name {
+    description = "Name of the VPC, used for network ACL lookups."
+}
+
 variable resource_group_id {
     description = "An existent Resource Group created by the HPC Foundation offering."
 }
@@ -37,6 +41,10 @@ variable private_dns_instance_id {
 }
 
 variable private_dns_zone_id {
+    default = ""
+}
+
+variable private_dns_reverse_zone_id {
     default = ""
 }
 
@@ -68,7 +76,7 @@ variable grid_manager_definition {
             ad_join_user = optional(string),
             ad_join_password = optional(string)
         })),
-        symphony_config_info     = optional(object({
+        symphony_config_info     = object({
             sym_cluster_id  = string,
             ego_base_port   = optional(number, 7869),
             ego_ssl_setup   = optional(bool, false),
@@ -78,7 +86,7 @@ variable grid_manager_definition {
             post_deployment_tasks = optional(string),
 
         })),
-        symphony_certificates=optional(object({
+        symphony_certificates=object({
             ca_certificate_pem     = optional(string),
             ca_intermediate_pem     = optional(string),
             soam_certificate_pem   = optional(string),
@@ -110,4 +118,12 @@ variable grid_manager_definition {
 
 variable deployment_private_key {
     description = "Private Key created by this offering to setup Symphony cluster."
+    type = string
+    sensitive = true
+}
+
+variable symphony_admin_password {
+    description = "Password used by Symphony post-deployment administration tasks."
+    type = string
+    sensitive = true
 }
