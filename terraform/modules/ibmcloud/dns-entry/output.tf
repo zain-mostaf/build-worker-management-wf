@@ -13,3 +13,15 @@
 output domain_name {
     value = local.zone_name
 }
+
+output reverse_zone_name {
+    value = local.reverse_zone_name
+}
+
+output reverse_zone_id {
+    value = local.reverse_zone_id
+}
+
+output ptr_record_count {
+    value = length(local.ptr_records_to_create)
+}

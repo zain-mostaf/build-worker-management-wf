@@ -19,3 +19,14 @@ output symphony_subnet_ids {
         for subnet in local.grid_manager_definition.subnets : module.subnets[subnet.key].id
     ]
 }
+
+output dns_ptr_diagnostics {
+    value = {
+        for zone_id, dns_entry in module.dns_entries : zone_id => {
+            forward_zone    = dns_entry.domain_name
+            reverse_zone    = dns_entry.reverse_zone_name
+            reverse_zone_id = dns_entry.reverse_zone_id
+            ptr_record_count = dns_entry.ptr_record_count
+        }
+    }
+}

@@ -95,3 +95,7 @@ output symphony_subnet_id {
 output symphony_worker_security_group {
     value = jsonencode([])
 }
+
+output dns_ptr_diagnostics {
+    value = module.grid_managers.dns_ptr_diagnostics
+}
