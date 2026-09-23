@@ -34,7 +34,7 @@ locals {
 resource "ibm_dns_resource_record" "dns_A_records" {
     for_each = local.machine_ip_name_mapping
     instance_id = local.private_dns_instance_id
-    zone_id = local.reverse_zone_id
+    zone_id = local.private_dns_zone_id
     type = "A"
     name = each.value
     rdata = each.key
@@ -47,7 +47,7 @@ resource "ibm_dns_resource_record" "dns_PTR_records" {
 
     for_each = local.ptr_records_to_create
     instance_id = local.private_dns_instance_id
-    zone_id = local.private_dns_zone_id
+    zone_id = local.reverse_zone_id
     type = "PTR"
     name = "${join(".", reverse(split(".", each.key)))}.in-addr.arpa."
     rdata = "${each.value}.${local.zone_name}."
