@@ -26,8 +26,17 @@ data "ibm_dns_zones" "zones" {
 locals {
     zone_name = try([for zone in data.ibm_dns_zones.zones.dns_zones : zone.name if zone.zone_id == local.private_dns_zone_id][0], "")
     reverse_zone_name = try("${join(".", slice(reverse(split(".", keys(local.machine_ip_name_mapping)[0])), 1, 4))}.in-addr.arpa", "")
-    reverse_zone_id = try([for zone in data.ibm_dns_zones.zones.dns_zones : zone.zone_id if zone.name == local.reverse_zone_name][0], "")
-    ptr_records_to_create = (local.reverse_zone_id != "" && local.private_dns_ptr_records) ? local.machine_ip_name_mapping : {}
+    existing_reverse_zone_id = try([for zone in data.ibm_dns_zones.zones.dns_zones : zone.zone_id if trim(zone.name, ".") == trim(local.reverse_zone_name, ".")][0], "")
+    reverse_zone_id = coalesce(local.existing_reverse_zone_id, try(ibm_dns_zone.reverse[0].id, ""))
+    ptr_records_to_create = (local.reverse_zone_name != "" && local.private_dns_ptr_records) ? local.machine_ip_name_mapping : {}
+}
+
+resource "ibm_dns_zone" "reverse" {
+    count = local.reverse_zone_name != "" && local.existing_reverse_zone_id == "" ? 1 : 0
+
+    instance_id = local.private_dns_instance_id
+    name = local.reverse_zone_name
+    description = "Reverse DNS zone for VSI PTR records"
 }
 
 // Create DNS A records from the received IP/name mapping received
