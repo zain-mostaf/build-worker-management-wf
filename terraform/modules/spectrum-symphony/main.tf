@@ -35,7 +35,6 @@ locals {
     ip_machine_mapping = { for idx in range(local.grid_manager_quantity) : local.selected_primary_ips[idx] => local.grid_manager_names[idx]}
 
     private_dns_zone_id = var.private_dns_zone_id
-    private_dns_reverse_zone_id = var.private_dns_reverse_zone_id
     private_dns_instance_id = var.private_dns_instance_id
     // future: multiple zone entries with adoption of multiple netowrks?
     dns_zone_entries = { for idx,obj in [local.private_dns_zone_id] : obj => {
@@ -95,7 +94,6 @@ module dns_entries {
     for_each = local.dns_zone_entries
     source = "./../ibmcloud/dns-entry"
     private_dns_zone_id = each.key
-    private_dns_reverse_zone_id = local.private_dns_reverse_zone_id
     private_dns_instance_id = each.value.dns_instance_id
     machine_ip_name_mapping = each.value.dns_record_mapping
 }

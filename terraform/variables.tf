@@ -45,18 +45,13 @@ variable ssh_keys {
 }
 
 variable private_dns_instance_name {
-    default = ""
+    type = string
     description = "Name of a Private DNS instance to create DNS records for the Virtual Machines."
 }
 
 variable private_dns_zone_name {
-    default = ""
+    type = string
     description = "Name of a zone under Private DNS instance where DNS records will be created."   
-}
-
-variable private_dns_reverse_zone_name {
-    default = ""
-    description = "Optional reverse DNS zone name for PTR records."
 }
 
 variable nfs_storage_definition {
@@ -80,28 +75,6 @@ variable nfs_storage_definition {
             }))
         }))
     })
-
-    default = {
-        key = "nfs-storage"
-        nfs_prefix_name = "nfs-storage"
-        nfs_storage_size = 100
-        nfs_replica_zone = "ca-tor-3"
-
-        mount_points = [
-            {
-                key = "data"
-                name = "data"
-                nfs_storage_ip = "10.249.0.8"
-                nfs_storage_subnet_name = "sn-20231031-01"
-                security_groups = [
-                    {
-                        name = "unleaded-quirk-stranger-congenial"
-                        exists =  true
-                    }
-                ]
-            }
-        ]
-    }
 
     validation {
         condition     = length(var.nfs_storage_definition.mount_points) > 0

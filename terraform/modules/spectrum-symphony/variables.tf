@@ -44,10 +44,6 @@ variable private_dns_zone_id {
     default = ""
 }
 
-variable private_dns_reverse_zone_id {
-    default = ""
-}
-
 variable nfs_storage_path {
     description = "NFS Storage path created by nfs-storage module."
 }

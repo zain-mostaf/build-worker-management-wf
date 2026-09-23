@@ -21,7 +21,6 @@ locals {
     resource_group_name = var.resource_group_name
     dns_instance_name = var.private_dns_instance_name
     dns_zone_name = var.private_dns_zone_name
-    dns_reverse_zone_name = var.private_dns_reverse_zone_name
 
     nfs_storage_definition = var.nfs_storage_definition
     grid_manager_definition = var.grid_manager_definition
@@ -64,7 +63,6 @@ data ibm_is_ssh_key ssh_key {
 locals {
     dns_instance_id = try(data.ibm_resource_instance.dns_instance[0].guid, "")
     dns_zone_id = try([for zone in data.ibm_dns_zones.zones[0].dns_zones : zone.zone_id if zone.name == local.dns_zone_name][0], "")
-    dns_reverse_zone_id = try([for zone in data.ibm_dns_zones.zones[0].dns_zones : zone.zone_id if zone.name == local.dns_reverse_zone_name][0], "")
     ssh_key_ids = concat([module.internal_ssh_key.ssh_key_id], [for key,obj in data.ibm_is_ssh_key.ssh_key : obj.id ])
 }
 
@@ -102,7 +100,6 @@ module grid_managers {
     ssh_keys = local.ssh_key_ids
     private_dns_instance_id = local.dns_instance_id
     private_dns_zone_id = local.dns_zone_id
-    private_dns_reverse_zone_id = local.dns_reverse_zone_id
     grid_manager_definition = local.grid_manager_definition
     symphony_admin_password = var.symphony_admin_password
     nfs_storage_path = module.nfs_storage.nfs_mount_paths[0]

@@ -3,19 +3,16 @@
 
 ibmcloud_api_key     = "REPLACE_WITH_IBM_CLOUD_API_KEY"
 symphony_admin_password = "REPLACE_WITH_SYMPHONY_ADMIN_PASSWORD"
-cluster_prefix       = "tor3eqt"
-zone                 = "ca-tor-3"
+cluster_prefix       = "REPLACE_WITH_CLUSTER_PREFIX"
+zone                 = "REPLACE_WITH_PRIMARY_ZONE"
 vpc_name             = "REPLACE_WITH_VPC_NAME"
 resource_group_name  = "REPLACE_WITH_RESOURCE_GROUP_NAME"
 ssh_keys             = []
 
 # IBM Cloud DNS Services instance and private zone.
-# These values select the IBM Cloud DNS instance and forward zone for A records.
-# Add a reverse zone name as well when PTR records are required.
+# Terraform manages A records and PTR records for every VSI.
 private_dns_instance_name = "REPLACE_WITH_DNS_INSTANCE_NAME"
 private_dns_zone_name     = "REPLACE_WITH_PRIVATE_DNS_ZONE_NAME"
-# Optional. Required only when PTR records are needed.
-private_dns_reverse_zone_name = ""
 
 grid_manager_definition = {
   prefix_name      = "gm"
@@ -32,12 +29,12 @@ grid_manager_definition = {
       key                  = "internal-subnet"
       name                 = "REPLACE_WITH_INTERNAL_SUBNET_NAME"
       exists               = true
-      subnet_section_cidrs = ["10.136.64.0/24"]
+      subnet_section_cidrs = ["10.0.0.0/24"]
     }
   ]
 
   symphony_config_info = {
-    sym_cluster_id      = "citi-tor3eqt"
+    sym_cluster_id      = "REPLACE_WITH_SYMPHONY_CLUSTER_ID"
     ego_base_port       = 9100
     ego_ssl_setup       = true
     ego_ssl_port        = 9114
@@ -58,7 +55,7 @@ grid_manager_definition = {
   placement_group = {
     key    = "placement-group"
     exists = false
-    name   = "tor3eqt-symphony-master-nodes-pg"
+    name   = "REPLACE_WITH_PLACEMENT_GROUP_NAME"
     type   = "host_spread"
   }
 
@@ -74,4 +71,26 @@ grid_manager_definition = {
   ]
 
   data_volumes = []
+}
+
+nfs_storage_definition = {
+  key                    = "nfs-storage"
+  nfs_prefix_name        = "nfs-storage"
+  nfs_storage_size       = 100
+  nfs_storage_iops       = 0
+  nfs_replica_zone       = "REPLACE_WITH_REPLICA_ZONE"
+  mount_points = [
+    {
+      key                       = "data"
+      name                      = "data"
+      nfs_storage_ip            = "REPLACE_WITH_NFS_IP"
+      nfs_storage_subnet_name   = "REPLACE_WITH_NFS_SUBNET_NAME"
+      security_groups = [
+        {
+          name   = "REPLACE_WITH_NFS_SECURITY_GROUP_NAME"
+          exists = true
+        }
+      ]
+    }
+  ]
 }

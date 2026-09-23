@@ -18,11 +18,6 @@ variable private_dns_instance_id {
 
 }
 
-variable private_dns_reverse_zone_id {
-    type = string
-    default = ""
-}
-
 variable machine_ip_name_mapping {
     type = map(string)
 }
