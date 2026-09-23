@@ -49,7 +49,7 @@ resource "ibm_dns_resource_record" "dns_PTR_records" {
     instance_id = local.private_dns_instance_id
     zone_id = local.reverse_zone_id
     type = "PTR"
-    name = "${join(".", reverse(split(".", each.key)))}.in-addr.arpa."
+    name = reverse(split(".", each.key))[0]
     rdata = "${each.value}.${local.zone_name}."
     ttl = local.private_dns_ttl
 }
