@@ -75,7 +75,7 @@ locals {
             symphony_password = base64encode(var.symphony_admin_password)
             dns_server_ips = try(local.grid_manager_definition.dns_server, "161.26.0.10")
       additional_routes = try(local.additional_routes, [])
-      symphony_web_certificate = local.symphony_webgui_certificate != "" ? "true" : "false"
+      symphony_webgui_certificate = local.symphony_webgui_certificate != "" ? "true" : "false"
       symphony_soam_certificate = local.symphony_soam_certificate != "" ? "true" : "false"
       symphony_cacert_certificate = local.symphony_cacert_certificate
       symphony_cacert_intermediate_cert = local.symphony_cacert_intermediate_cert
