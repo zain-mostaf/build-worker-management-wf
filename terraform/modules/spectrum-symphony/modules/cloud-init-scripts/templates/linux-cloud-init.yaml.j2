@@ -3,15 +3,15 @@ users:
  - name: egoadmin
  - name: ibm_monitoring
 packages:
- - ansible-core
+ - jq
 write_files:
- - path: /opt/symphony-deployment-scripts/linux-master-deployment.yaml.gz
+ - path: /opt/symphony-deployment-scripts/linux-{{ego_role}}-deployment.sh.gz
    encoding: b64
    content: "{{linux_master_deployment_content}}"
  - path: /opt/symphony-deployment-scripts/linux-master-deployment-env.json.gz
    encoding: b64
    content: "{{linux_master_deployment_env_content}}"
- - path: /opt/symphony-deployment-scripts/linux-master-postdeployment.yaml.gz
+ - path: /opt/symphony-deployment-scripts/linux-master-postdeployment.sh.gz
    encoding: b64
    content: "{{linux_master_postdeployment_content}}" 
  - path: /opt/symphony-deployment-scripts/id_rsa.gz
@@ -43,4 +43,6 @@ bootcmd:
  - systemctl restart NetworkManager
 runcmd:
  - for zipped_file in /opt/symphony-deployment-scripts/*.gz; do gunzip $zipped_file; done
- - export ANSIBLE_HOST_KEY_CHECKING=False && cd /opt/symphony-deployment-scripts && ansible-playbook -vvv -i inventory.txt -e @linux-master-deployment-env.json  linux-master-deployment.yaml linux-master-postdeployment.yaml
+ - chmod 0700 /opt/symphony-deployment-scripts/*.sh
+ - cd /opt/symphony-deployment-scripts && ./linux-{{ego_role}}-deployment.sh
+ - cd /opt/symphony-deployment-scripts && ./linux-master-postdeployment.sh

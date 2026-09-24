@@ -55,7 +55,7 @@ locals {
    // New attribute lines to be included (all string)
    ego_new_attributes = [ for attr in ["workerPool", "techStack"] : "${attr}  String  ()       ()              (Custom Attribute - ${attr})"]
 
-   // Template data (used by Ansible to deploy Symphony grid managers) 
+    // Template data used by the Linux deployment scripts.
    template_data = {
       EGO_TOP = "/opt/ibm/spectrumcomputing",
       SHARED_EGO_TOP = "/data/${local.grid_manager_definition.symphony_config_info.sym_cluster_id}/sym732"
@@ -107,8 +107,8 @@ data jinja_template linux_cloud_init_file {
         type = "json"
         data = jsonencode({ 
             ego_role = local.ego_role 
-            linux_master_deployment_content = base64gzip(file("${path.module}/ansible-playbooks/linux-${local.ego_role}-deployment.yaml")),
-            linux_master_postdeployment_content = base64gzip(local.linux_post_deployment_tasks),
+            linux_master_deployment_content = base64gzip(file("${path.module}/bash-scripts/linux-${local.ego_role}-deployment.sh")),
+            linux_master_postdeployment_content = base64gzip(file("${path.module}/bash-scripts/linux-master-postdeployment.sh")),
             ego_conf_content = base64gzip(local.ego_conf_content),
             linux_master_deployment_env_content = base64gzip(jsonencode(local.template_data)),
             cacert_pem_content = base64gzip(local.symphony_cacert_certificate)
@@ -131,12 +131,7 @@ locals {
 
     ego_conf_content = data.jinja_template.ego_conf_file.result
 
-    // Linux post-deployment-playbook.yaml (complete with additional data from parameter)
-    linux_post_deployment_tasks = templatefile("${path.module}/ansible-playbooks/linux-master-postdeployment.yaml", {
-        post_deployment_tasks = join("\n",[for line in split("\n", local.post_deployment_tasks) : "  ${(line)}"])
-    })
-
-    // Linux cloud init after Jinja parsin
+    // Linux cloud init after Jinja parsing
     cloud_init_linux = data.jinja_template.linux_cloud_init_file
 
 }
